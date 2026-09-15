@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+!seally.env.example
+*.local
+*.pem
+*.key
+.secrets/

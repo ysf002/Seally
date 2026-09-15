@@ -8,10 +8,9 @@ services:
       - ${SEAFILE_VOLUME:-/opt/seafile-data}:/shared
 
       # 可选：先在宿主机挂载 NFS，再取消下一行注释。
-      # - ${NFS_VOLUME:-/mnt/nfs}:/mnt/nfs
+      # - ${SEALLY_NFS_VOLUME:-/mnt/nfs}:/mnt/nfs
     environment:
       - TZ=${TIME_ZONE:-Etc/UTC}
-      - SM_RUN_MODE=${SM_RUN_MODE:-release}
 
       # Seafile 数据库。四种受支持组合的官方服务名均为 db。
       - SEAFILE_MYSQL_DB_HOST=${SEAFILE_MYSQL_DB_HOST:-db}
@@ -22,28 +21,20 @@ services:
       - SEAFILE_MYSQL_DB_SEAFILE_DB_NAME=${SEAFILE_MYSQL_DB_SEAFILE_DB_NAME:-seafile_db}
       - SEAFILE_MYSQL_DB_SEAHUB_DB_NAME=${SEAFILE_MYSQL_DB_SEAHUB_DB_NAME:-seahub_db}
 
-      # Seafile 12 使用 memcached；Seafile 13 使用 redis。要求显式设置以防接错。
-      - CACHE_PROVIDER=${CACHE_PROVIDER:?Set CACHE_PROVIDER to memcached for Seafile 12 or redis for Seafile 13}
+      # Seafile 13 复用其 CACHE_PROVIDER；Seafile 12 未定义该变量，默认使用 Memcached。
+      - CACHE_PROVIDER=${CACHE_PROVIDER:-memcached}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - MEMCACHED_HOST=${MEMCACHED_HOST:-memcached}
       - MEMCACHED_PORT=${MEMCACHED_PORT:-11211}
 
-      # 容器内走 seafile-net，浏览器访问走公开域名。
-      - SM_SEAFILE_INNER_URL=${SM_SEAFILE_INNER_URL:-http://seafile:80}
+      # 浏览器访问使用公开域名；容器内 Seafile 地址使用程序默认值 http://seafile:80。
       - SM_SEAFILE_PUBLIC_URL=${SEAFILE_SERVER_PROTOCOL:-http}://${SEAFILE_SERVER_HOSTNAME:?Variable is not set or empty}
       - SM_JWT_SECRET=${JWT_PRIVATE_KEY:?Variable is not set or empty}
       - SM_SESSION_SECRET=${SM_SESSION_SECRET:?Variable is not set or empty}
-      - SM_SESSION_TTL=${SM_SESSION_TTL:-23h}
 
-      # 可选网盘。留空不会影响 Seally 启动，只会使对应入口不可用。
-      - ONEDRIVE_CLIENT_ID=${ONEDRIVE_CLIENT_ID:-}
-      - GDRIVE_CLIENT_ID=${GDRIVE_CLIENT_ID:-}
-      - GDRIVE_CLIENT_SECRET=${GDRIVE_CLIENT_SECRET:-}
-      - GDRIVE_REDIRECT_URI=${GDRIVE_REDIRECT_URI:-}
-      - DROPBOX_CLIENT_ID=${DROPBOX_CLIENT_ID:-}
-      - BAIDU_APP_ROOT=${BAIDU_APP_ROOT:-/apps/seally}
+      # 云盘应用身份、OAuth Secret 与传输参数由管理员在 Seally Web 设置页管理。
 
     labels:
       # 与 Seafile 共用域名；Caddy 去掉 /mate 前缀后转发到 Seally 8080。

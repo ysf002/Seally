@@ -18,8 +18,9 @@
 | 专业版（Pro） | 13 | `seafileltd/seafile-pro-mc:13.0-latest` | Redis | 支持 |
 
 四种组合共用仓库根目录的 [`seally.yml`](seally.yml)。CE/Pro 的差异由 Seafile
-官方 Compose 文件处理；Seally 侧只需要为 Seafile 12 设置 `CACHE_PROVIDER=memcached`，
-为 Seafile 13 设置 `CACHE_PROVIDER=redis`。
+官方 Compose 文件处理。Seally 会复用 Seafile 13 的 `CACHE_PROVIDER=redis`；
+Seafile 12 的官方环境文件没有该变量，`seally.yml` 会自动回退到 `memcached`，
+无需为 Seally 单独配置缓存类型。
 
 ### Seafile 底层存储限制
 
@@ -35,7 +36,8 @@
 - **Seafile 和 Seally 一起全新部署**：阅读 [全新联合部署](docs/deploy-with-new-seafile.md)。
 
 两个场景的核心流程都是：把 `seally.yml` 放入 Seafile Compose 目录，在原有
-`COMPOSE_FILE` 末尾追加 `seally.yml`，补充环境变量，再配置 Seahub SSO 入口。
+`COMPOSE_FILE` 末尾追加 `seally.yml`，补充两个 Seally 部署变量，再配置 Seahub
+SSO 入口。云盘应用身份在部署完成后的 Web 设置页管理，不写入 `.env`。
 
 ## 仓库内容
 

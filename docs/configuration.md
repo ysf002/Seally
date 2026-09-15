@@ -1,7 +1,8 @@
 # 配置参考
 
-Seally 复用 Seafile 的 Compose 项目、数据库、缓存、公开域名和数据卷。所有变量都
-应写入 Seafile 部署目录原有的 `.env`，不要维护第二份互相覆盖的生产配置。
+Seally 复用 Seafile 的 Compose 项目、数据库、缓存、公开域名和数据卷。部署变量应
+写入 Seafile 部署目录原有的 `.env`，不要维护第二份互相覆盖的生产配置；云盘应用
+身份和 Google 传输参数则由管理员在 Web 设置页管理。
 
 ## 必填配置
 
@@ -14,7 +15,6 @@ Seally 复用 Seafile 的 Compose 项目、数据库、缓存、公开域名和�
 | `SEAFILE_MYSQL_DB_PASSWORD` | 复用 Seafile | Seafile 数据库用户密码 |
 | `JWT_PRIVATE_KEY` | 复用 Seafile | Seahub 第三方 SSO 签名密钥；已有部署不要更换 |
 | `SM_SESSION_SECRET` | 新增 | Seally 独立高熵密钥，执行 `openssl rand -hex 32` 生成 |
-| `CACHE_PROVIDER` | 明确设置 | Seafile 12 为 `memcached`，Seafile 13 为 `redis` |
 
 数据库名和连接参数默认遵循 Seafile 官方值。只有原部署使用了自定义值时才需要覆盖：
 
@@ -41,25 +41,14 @@ SEAFILE_MYSQL_DB_SEAHUB_DB_NAME=seahub_db
 
 ## 缓存
 
-Seafile 12 官方 Compose 使用 Memcached：
+Seally 不需要单独配置缓存类型。Seafile 13 官方环境文件中的
+`CACHE_PROVIDER=redis` 会直接传给 Seally；Seafile 12 官方环境文件没有
+`CACHE_PROVIDER`，`seally.yml` 会自动使用 `memcached`。Seafile 13 的缓存变化及
+环境变量定义见 [官方环境变量参考](https://manual.seafile.com/13.0/config/env/)。
 
-```dotenv
-CACHE_PROVIDER=memcached
-MEMCACHED_HOST=memcached
-MEMCACHED_PORT=11211
-```
-
-Seafile 13 官方 Compose 默认使用 Redis：
-
-```dotenv
-CACHE_PROVIDER=redis
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_PASSWORD=
-```
-
-Seafile 13 的缓存变化及环境变量定义见 [官方环境变量参考](https://manual.seafile.com/13.0/config/env/)。
-如果现有部署为 Redis 设置了密码，Seally 的 `REDIS_PASSWORD` 必须复用同一个值。
+Redis/Memcached 的地址、端口和密码同样复用 Seafile 原有的 `REDIS_*` 或
+`MEMCACHED_*` 连接参数。不要在 Seally 配置段中重复定义这些变量。如果现有部署为
+Redis 设置了密码，Seally 会读取同一个 `REDIS_PASSWORD`。
 
 ## Seafile 底层对象存储
 
@@ -77,13 +66,12 @@ Pro 部署应保持 `INIT_S3_STORAGE_BACKEND_CONFIG=false`。已有 Pro 部署�
 
 ## 地址与反向代理
 
-```dotenv
-SM_SEAFILE_INNER_URL=http://seafile:80
-```
+Seally 默认通过 `http://seafile:80` 访问同一 `seafile-net` 中的官方 Seafile 服务，
+标准部署无需显式配置内部地址。若自定义了 Seafile 的 Compose 服务名或容器端口，
+当前社区模板不再能直接适用，需要同步调整服务网络设计。
 
-该地址只在 `seafile-net` 内使用，不应改成公网域名。公开地址由
-`SEAFILE_SERVER_PROTOCOL` 与 `SEAFILE_SERVER_HOSTNAME` 组合生成。仓库提供的
-Caddy 标签会把同一域名下的 `/mate/*` 转发到 Seally，并移除 `/mate` 前缀。
+公开地址由 `SEAFILE_SERVER_PROTOCOL` 与 `SEAFILE_SERVER_HOSTNAME` 组合生成。仓库
+提供的 Caddy 标签会把同一域名下的 `/mate/*` 转发到 Seally，并移除 `/mate` 前缀。
 
 若不用官方 Caddy，而是自建 Nginx、Traefik 或外部负载均衡器，需要自行实现等价的
 路径转发，并保证浏览器看到的地址仍为 `https://域名/mate/`。本仓库未提供这些代理的
@@ -108,33 +96,40 @@ Seally 容器内使用以下路径：
 Seally 容器。取消 `seally.yml` 中这一行的注释：
 
 ```yaml
-- ${NFS_VOLUME:-/mnt/nfs}:/mnt/nfs
+- ${SEALLY_NFS_VOLUME:-/mnt/nfs}:/mnt/nfs
 ```
 
-然后在 `.env` 设置真实宿主机路径，例如 `NFS_VOLUME=/mnt/nfs`。确认
+然后在 `.env` 设置真实宿主机路径，例如 `SEALLY_NFS_VOLUME=/mnt/nfs`。确认
 `mountpoint /mnt/nfs` 成功后再重建 Seally 容器。NFS 挂载根和用户授权在 Seally
 “设置”页面中管理。
 
-## 可选网盘
+## 云盘应用设置
 
-| 变量 | 用途 |
-|---|---|
-| `ONEDRIVE_CLIENT_ID` | OneDrive 公共客户端 ID |
-| `GDRIVE_CLIENT_ID` | Google Drive OAuth 客户端 ID |
-| `GDRIVE_CLIENT_SECRET` | Google Drive OAuth 客户端密钥 |
-| `GDRIVE_REDIRECT_URI` | Google Drive 回调地址，通常为 `https://域名/mate/api/v1/drives/oauth/callback` |
-| `DROPBOX_CLIENT_ID` | Dropbox 应用客户端 ID |
-| `BAIDU_APP_ROOT` | 百度应用目录，默认 `/apps/seally`，必须匹配开放平台应用名 |
+云盘应用身份不再通过 `.env` 或 Compose 传入。以 Seafile 管理员登录 Seally，打开
+“设置 → 云盘应用设置”即可管理：
 
-凭据不要提交到 Git。Google Drive 的三个 `GDRIVE_*` 变量必须成组配置；非 localhost
-部署应使用 HTTPS 回调，并与 Google Cloud Console 中的回调地址完全一致。
+- **OneDrive**：默认使用 Seally 内置的 Microsoft 公共客户端，通过设备码授权，
+  不需要 Client Secret；页面保留自定义 Client ID 覆盖入口。
+- **Google Drive**：每个部署填写自己在 Google Cloud 创建的 Web OAuth Client ID
+  和 Client Secret。默认回调地址为
+  `https://seafile-mate.speedboot.cc/oauth/callback`，必须在 Google Cloud Console 的
+  Authorized redirect URIs 中逐字登记；如使用自己的回调服务，可在页面覆盖。
+- **Dropbox**：正式 App 内置前，可在页面填写已通过 Production 审核的 App key；
+  不需要 App Secret 和 Redirect URI。
+- **Google 传输参数**：账号/应用并发数和 quota units 均在同一页面的高级区域中
+  修改；不填写或不修改时使用程序内置默认值。
 
-## 日志与会话
+Google Client Secret 写入 `seafile_db.provider_settings` 前会使用
+`SM_SESSION_SECRET` 派生的 AES-256-GCM 密钥加密。Web 页面和读取 API 只显示
+“已配置”，不会回显 Secret。留空保存会保留原值，只有显式选择“清除”才会删除。
+更换任一云盘的 Client ID 或 Google Client Secret 后，原有 OAuth token 可能不再能
+刷新；应安排相关用户重新授权连接。
 
-```dotenv
-SM_RUN_MODE=release
-SM_SESSION_TTL=23h
-TIME_ZONE=Asia/Shanghai
-```
+百度网盘 Client ID、Client Secret 和应用目录 `/apps/seally` 使用程序内置值，
+无需显式配置。
 
-`SM_SESSION_TTL` 使用 Go duration 格式，例如 `30m`、`12h`、`23h`。
+## 内置默认值
+
+Seally 默认以 `release` 模式运行，会话有效期为 23 小时，容器内通过
+`http://seafile:80` 访问 Seafile。这些值在标准部署中无需写入 `.env`。
+时区继续直接复用 Seafile 的 `TIME_ZONE`。

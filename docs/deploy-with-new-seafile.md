@@ -112,30 +112,13 @@ COMPOSE_FILE='seafile-server.yml,caddy.yml,seadoc.yml,elasticsearch.yml,seally.y
 
 ```dotenv
 SEALLY_IMAGE=ghcr.io/ysf002-project/seally:YYYY.MM.PATCH
-SM_RUN_MODE=release
 SM_SESSION_SECRET=替换为另一个随机值
-SM_SESSION_TTL=23h
-SM_SEAFILE_INNER_URL=http://seafile:80
 ```
 
-按版本补充缓存配置。
-
-Seafile 12：
-
-```dotenv
-CACHE_PROVIDER=memcached
-MEMCACHED_HOST=memcached
-MEMCACHED_PORT=11211
-```
-
-Seafile 13：
-
-```dotenv
-CACHE_PROVIDER=redis
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_PASSWORD=
-```
+缓存类型无需额外配置。Seafile 13 会复用官方 `.env` 中的
+`CACHE_PROVIDER=redis`；Seafile 12 的官方 `.env` 没有该变量，`seally.yml` 会自动
+使用 `memcached`。Redis/Memcached 的地址、端口和密码也直接复用 Seafile 原有配置，
+不要在 Seally 配置段中重复定义这些变量。
 
 把 `SEALLY_IMAGE` 替换成发布页中的完整版本标签或 digest。生产环境禁止使用
 `latest`。
@@ -198,9 +181,12 @@ Seahub 的自定义导航机制可参考 [官方说明](https://manual.seafile.c
 1. 打开 `https://你的域名/` 并使用管理员账号登录。
 2. 确认左侧出现 **Seally**，点击后进入 `/mate/` 且无需再次登录。
 3. 确认 Seally 可以读取当前账号的资料库。
-4. 运行 `docker compose ps`，确认所有必需服务都在运行。
-5. 备份 `.env` 中的密钥，但不要与数据库备份存放在同一位置。
-6. 将数据库、`${SEAFILE_VOLUME}` 和 Compose 目录纳入定期备份。
+4. 如需 Google Drive 或 Dropbox，以管理员身份打开“设置 → 云盘应用设置”填写应用
+   身份；OneDrive 已使用内置公共客户端，无需部署变量或 Client Secret。
+5. 运行 `docker compose ps`，确认所有必需服务都在运行。
+6. 备份 `.env` 中的密钥，但不要与数据库备份存放在同一位置。
+7. 将数据库、`${SEAFILE_VOLUME}` 和 Compose 目录纳入定期备份；Google Client
+   Secret 已加密保存在数据库中，恢复时必须同时保留原 `SM_SESSION_SECRET`。
 
 Seafile Pro 授权与 Seally 授权是两套独立机制。使用 Pro 镜像时仍需按 Seafile 官方
 要求安装 Seafile Pro 授权；这不会替代 Seally 自身的授权。

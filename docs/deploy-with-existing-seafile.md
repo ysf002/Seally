@@ -20,7 +20,7 @@ docker compose ps
 
 根据 `.env` 中的 `SEAFILE_IMAGE` 判断组合：
 
-| 镜像 | 组合 | `CACHE_PROVIDER` |
+| 镜像 | 组合 | Seally 自动使用的缓存 |
 |---|---|---|
 | `seafileltd/seafile-mc:12.0-*` | 12 CE | `memcached` |
 | `seafileltd/seafile-pro-mc:12.0-*` | 12 Pro | `memcached` |
@@ -80,13 +80,12 @@ Seafile 13 Pro 如果使用 Elasticsearch，原值通常还包含 `elasticsearch
 
 ```dotenv
 SEALLY_IMAGE=ghcr.io/ysf002-project/seally:YYYY.MM.PATCH
-CACHE_PROVIDER=redis
 SM_SESSION_SECRET=替换为随机值
-SM_RUN_MODE=release
 ```
 
 - 把 `SEALLY_IMAGE` 替换为发布页给出的完整版本标签或 digest，不要使用 `latest`。
-- Seafile 12 把 `CACHE_PROVIDER` 改为 `memcached`；Seafile 13 使用 `redis`。
+- 缓存类型无需重复配置：Seafile 13 复用现有的 `CACHE_PROVIDER`，Seafile 12 在该
+  变量不存在时自动使用 `memcached`。
 - 使用 `openssl rand -hex 32` 生成 `SM_SESSION_SECRET`。
 - 确认现有 `JWT_PRIVATE_KEY` 非空。Seally 会直接复用它；如果已有值，不得重新生成
   或修改，否则现有 Seafile/SeaDoc/通知服务的令牌可能失效。
@@ -151,7 +150,9 @@ docker compose logs --tail=100 seafile
 1. 登录 Seafile，确认左侧出现 **Seally**。
 2. 点击入口，确认浏览器进入 `https://你的域名/mate/` 且不要求再次登录。
 3. 在 Seally 中确认能列出当前用户可访问的 Seafile 资料库。
-4. 运行 `docker compose ps`，确认 `seafile`、`caddy`、数据库、缓存和 `seally`
+4. 如需 Google Drive 或 Dropbox，以管理员身份打开“设置 → 云盘应用设置”填写应用
+   身份；OneDrive 已使用内置公共客户端，无需部署变量或 Client Secret。
+5. 运行 `docker compose ps`，确认 `seafile`、`caddy`、数据库、缓存和 `seally`
    都处于运行状态。
 
 如果直接访问 `/mate/` 正常但点击侧边栏登录失败，优先核对

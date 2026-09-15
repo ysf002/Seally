@@ -21,7 +21,6 @@ docker compose logs --tail=100 caddy
 - `SEAFILE_SERVER_HOSTNAME`：复用现有域名或 IP。
 - `JWT_PRIVATE_KEY`：复用 Seafile 已有值。
 - `SM_SESSION_SECRET`：执行 `openssl rand -hex 32` 新生成，仅供 Seally 使用。
-- `CACHE_PROVIDER`：Seafile 12 填 `memcached`，Seafile 13 填 `redis`。
 
 修改 `.env` 后先运行 `docker compose config --quiet`。
 
@@ -64,9 +63,11 @@ docker compose ps db
 
 ## 缓存连接失败
 
-- Seafile 12 官方 Compose 提供 `memcached`，应设置 `CACHE_PROVIDER=memcached`。
-- Seafile 13 官方 Compose 提供 `redis`，应设置 `CACHE_PROVIDER=redis`。
-- Redis 使用密码时，Seafile 与 Seally 的 `REDIS_PASSWORD` 必须相同。
+- 先检查 `docker compose config` 中 Seally 的 `CACHE_PROVIDER`：Seafile 12 应为
+  `memcached`，Seafile 13 应与 Seafile `.env` 中的 `CACHE_PROVIDER` 一致（官方默认
+  为 `redis`）。
+- Redis/Memcached 地址和密码由 Seally 直接读取 Seafile 原有变量，不要在 Seally
+  配置段中重复定义。
 
 修改后重建而不是只重启容器，确保新环境变量生效：
 

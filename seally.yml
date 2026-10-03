@@ -1,18 +1,44 @@
 services:
   seally:
-    image: ${SEALLY_IMAGE:?Set SEALLY_IMAGE to a versioned Seally image or digest}
+    image: ${SEALLY_IMAGE:-seallyhq/seally:2026.09.2}
     container_name: seally
     restart: unless-stopped
     volumes:
-      # 必须与 Seafile 服务使用同一个宿主机目录，并保持容器内路径为 /shared。
+      # 与 seafile 主服务挂载同一数据目录，路径映射保持一致：
+      #   /opt/seafile-data  →  /shared
+      # seally 从 /shared/seafile/conf/ 读取数据库连接信息和配置文件
+      # seally 自身业务数据写入 /shared/seafile/seafile-mate-data/
       - ${SEAFILE_VOLUME:-/opt/seafile-data}:/shared
 
-      # 可选：先在宿主机挂载 NFS，再取消下一行注释。
-      # - ${SEALLY_NFS_VOLUME:-/mnt/nfs}:/mnt/nfs
+      # ── NFS 挂载（可选） ──────────────────────────────────────
+      # 先在宿主机把 NFS 盘挂载好,例如挂到 /mnt/nfs。推荐使用默认的 hard 挂载,
+      # 不要改成 soft——soft 挂载在超时后会让读写调用直接返回错误,写数据时
+      # 可能造成静默的数据损坏(见 nfs(5) 手册
+      # https://man7.org/linux/man-pages/man5/nfs.5.html)。
+      # 可以用 autofs,或在 /etc/fstab 里加 _netdev,nofail 选项,让挂载与本容器的
+      # bind 挂载不要直接绑 NFS 挂载点本身(如 /mnt/nfs:/mnt/nfs):Docker 在
+      # 启动/重建容器时会先 stat 一次 bind 来源,NFS 离线时这一步会挂起,
+      # 导致 Seally 根本起不来、所有网盘都不可用(2026-09-26 实测坐实)。
+      # 改成绑 NFS 挂载点的上一级目录,并用长语法加 rslave 传播——这样 Docker
+      # 启动时 stat 的是本地目录 /mnt,不会挂起;rslave 还能让宿主机之后新增的
+      # 挂载(autofs、remount)传播进容器,不用重建容器。容器内路径仍保持不变
+      # (仍是 /mnt/nfs),下面是实测验证过的绑定:
+      - type: bind
+        source: /mnt
+        target: /mnt
+        bind:
+          propagation: rslave
+      # 注意:这样 /mnt 下的其他内容也会一并对容器可见。如果宿主机 /mnt 下还有
+      # 别的数据,改用一个专用父目录,例如把 NFS 挂到 /mnt/seally-nfs/<挂载名>
+      # 下,再把上面的 source/target 换成 /mnt/seally-nfs,避免暴露无关目录。
+      #
+      # 挂好后,登录 seally「设置」页面「NFS 挂载管理」新增挂载根——
+      # 只需填一个目录名,系统会自动在 /mnt/nfs 下创建对应子目录,无需手动 mkdir、无需重建容器。
     environment:
+      # ── 运行环境 ──────────────────────────────────────────────
       - TZ=${TIME_ZONE:-Etc/UTC}
 
-      # Seafile 数据库。四种受支持组合的官方服务名均为 db。
+      # ── 数据库连接 ───────────────────────────────────────────
       - SEAFILE_MYSQL_DB_HOST=${SEAFILE_MYSQL_DB_HOST:-db}
       - SEAFILE_MYSQL_DB_PORT=${SEAFILE_MYSQL_DB_PORT:-3306}
       - SEAFILE_MYSQL_DB_USER=${SEAFILE_MYSQL_DB_USER:-seafile}
@@ -21,7 +47,8 @@ services:
       - SEAFILE_MYSQL_DB_SEAFILE_DB_NAME=${SEAFILE_MYSQL_DB_SEAFILE_DB_NAME:-seafile_db}
       - SEAFILE_MYSQL_DB_SEAHUB_DB_NAME=${SEAFILE_MYSQL_DB_SEAHUB_DB_NAME:-seahub_db}
 
-      # Seafile 13 复用其 CACHE_PROVIDER；Seafile 12 未定义该变量，默认使用 Memcached。
+      # ── 缓存连接 ─────────────────────────────────────────────
+      # Seafile 13 复用 CACHE_PROVIDER；Seafile 12 未定义时回退到 Memcached。
       - CACHE_PROVIDER=${CACHE_PROVIDER:-memcached}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
@@ -29,18 +56,26 @@ services:
       - MEMCACHED_HOST=${MEMCACHED_HOST:-memcached}
       - MEMCACHED_PORT=${MEMCACHED_PORT:-11211}
 
-      # 浏览器访问使用公开域名；容器内 Seafile 地址使用程序默认值 http://seafile:80。
+
+      # ── 对接 Seafile 服务 ─────────────────────────────────────
+      # 容器内 Seafile 地址使用程序默认值 http://seafile:80。
       - SM_SEAFILE_PUBLIC_URL=${SEAFILE_SERVER_PROTOCOL:-http}://${SEAFILE_SERVER_HOSTNAME:?Variable is not set or empty}
+
+      # Seafile 侧边栏入口签发 SSO token 所用的密钥，与 seafile 共享同一个值
       - SM_JWT_SECRET=${JWT_PRIVATE_KEY:?Variable is not set or empty}
+
+      # seally 自己的 session token 签名密钥（独立设置，不与 JWT_PRIVATE_KEY 混用）。
+      # 授权的部署指纹由这个值派生（弱值/示例默认值会被拒绝）。部署完成并正式签发
+      # 授权之后再更改此值，会使已安装的授权文件失效，需重新签发——见
+      # deploy/seally.env.example 第 3 项与 README「获取并安装授权」。
       - SM_SESSION_SECRET=${SM_SESSION_SECRET:?Variable is not set or empty}
 
-      # 云盘应用身份、OAuth Secret 与传输参数由管理员在 Seally Web 设置页管理。
-
     labels:
-      # 与 Seafile 共用域名；Caddy 去掉 /mate 前缀后转发到 Seally 8080。
+      # Caddy 反向代理：与 seafile 共用同一域名，/mate/* 转发给 seally
       caddy: ${SEAFILE_SERVER_PROTOCOL:-http}://${SEAFILE_SERVER_HOSTNAME:?Variable is not set or empty}
       caddy.handle_path: /mate/*
       caddy.handle_path.reverse_proxy: "{{upstreams 8080}}"
+
     depends_on:
       db:
         condition: service_healthy
@@ -51,4 +86,5 @@ services:
 
 networks:
   seafile-net:
+    external: true
     name: seafile-net

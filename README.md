@@ -78,3 +78,4 @@ SSO 入口。云盘应用身份在部署完成后的 Web 设置页管理，不�
 `docker compose config --services`、`docker compose ps`，以及 `docker compose logs
 --tail=200 seally` 和 `/opt/seafile/logs/seally.log` 中相关错误的脱敏输出。请勿提交
 `.env`、数据库密码、OAuth 凭据或任何密钥。
+QQ: 2324069743
